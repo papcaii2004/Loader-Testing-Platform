@@ -17,3 +17,4 @@ __pycache__/
 # File của các IDE
 .vscode/
 .idea/
+/build
