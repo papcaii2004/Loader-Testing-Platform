@@ -12,7 +12,7 @@ __pycache__/
 /uploads/*
 /test_logs/*
 /build/*
-/shellcodé/*
+/shellcode/*
 
 # File của các IDE
 .vscode/
