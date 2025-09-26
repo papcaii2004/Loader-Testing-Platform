@@ -51,6 +51,8 @@ Mục tiêu của giai đoạn này là tạo ra một snapshot gốc tên là *
 8.  **Tạo Snapshot Gốc:**
     -   Trong VMware, tạo một snapshot và đặt tên chính xác là: **`clean_install`**.
 
+**Lưu ý về Đặc quyền:** Để phục vụ cho việc tự động hóa và thu thập log hệ thống một cách toàn diện, tài khoản test được cấu hình với quyền Administrator và UAC đã được vô hiệu hóa
+
 ---
 
 ## Giai đoạn 2: Tạo VM Kiểm thử Cụ thể (Lặp lại cho mỗi AV)
