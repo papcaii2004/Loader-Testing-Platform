@@ -1,0 +1,18 @@
+# Môi trường ảo
+venv/
+.venv/
+
+# File cache của Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Các file build và output
+/output/*
+/uploads/*
+/test_logs/*
+/build/
+
+# File của các IDE
+.vscode/
+.idea/
