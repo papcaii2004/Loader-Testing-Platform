@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(levelname)s] - 
 # Cập nhật thông tin máy ảo của bạn ở đây
 VMS_CONFIG = {
     "Windows Defender": {
-        "vmx_path": r"D:\VMs\Win11_Defender\Win11_Defender.vmx", # THAY ĐỔI ĐƯỜNG DẪN NÀY
+        "vmx_path": r"D:\VMs\Win11_Defender\Windows_11_01.vmx.vmx", # THAY ĐỔI ĐƯỜNG DẪN NÀY
         "user": "test",
         "pass": "test",
         "log_collector_host": "./log_collectors/collect_defender.ps1"
@@ -186,7 +186,7 @@ def run_single_test(vm_name, payload_path, build_options):
             run_command(["vmrun", "-gu", vm_info["user"], "-gp", vm_info["pass"], "copyFileToGuest", vm_info["vmx_path"], collector_script_on_host, GUEST_LOG_COLLECTOR_PATH])
             
             # Chạy script collector trên máy ảo
-            run_command(["vmrun", "-gu", vm_info["user"], "-gp", vm_info["pass"], "runProgramInGuest", vm_info["vmx_path"], "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-ExecutionPolicy", "Bypass", "-File", GUEST_LOG_COLLECTOR_PATH])
+            run_command(["vmrun", "-gu", vm_info["user"], "-gp", vm_info["pass"], "runProgramInGuest", vm_info["vmx_path"], "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-ExecutionPolicy", "Bypass", "-File", GUEST_LOG_COLLECTOR])
             time.sleep(10) # Cho script phức tạp hơn có thời gian chạy
             
             # Kéo file kết quả về (logic không đổi)
@@ -207,7 +207,7 @@ def run_single_test(vm_name, payload_path, build_options):
 
     # 6. Cleanup
     logging.info("Stopping VM...")
-    run_command(["vmrun", "stop", vm_info["vmx_path"]])
+    # run_command(["vmrun", "stop", vm_info["vmx_path"]])
     time.sleep(10)
 
     result_status = "SUCCESS" if connection_received else "FAILED"
