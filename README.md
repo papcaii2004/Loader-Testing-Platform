@@ -191,10 +191,70 @@ Giai đoạn cuối cùng tập trung vào việc biến dữ liệu thu thập 
 *   **🖥️ Nâng cấp Nền tảng & Giao diện:**
     -   Cải thiện Dashboard với khả năng **hiển thị tiến trình test theo thời gian thực** (sử dụng AJAX/JavaScript).
     -   Thêm chức năng quản lý, xem lại và so sánh kết quả của các lần test cũ.
-    
+
 ---
 
 ## 🔒 Phạm vi & Giới hạn
 -   Toàn bộ thử nghiệm **chỉ được thực hiện trên môi trường nội bộ**.
 -   Payload được sinh ra **không được phát tán ra Internet**.
 -   Đây **không phải công cụ tấn công**, chỉ phục vụ nghiên cứu cho mục đích phòng thủ (Blue Team) và kiểm thử (Red Team).
+
+## Tài liệu Tham khảo
+
+### I. Tổng quan về Kỹ thuật Lẩn tránh & Phát triển Mã độc
+- **MITRE ATT&CK® – Defense Evasion**  
+  [https://attack.mitre.org/tactics/TA0005/](https://attack.mitre.org/tactics/TA0005/)  
+  *"Tàng thư” về các chiến thuật và kỹ thuật tấn công*. Phần *Defense Evasion* mô tả chi tiết hầu hết các kỹ thuật như Process Injection, Obfuscation,… Đây là nguồn tham khảo nền tảng bắt buộc.
+
+- **ired.team – Code Injection**  
+  [https://www.ired.team/offensive-security/code-injection-process-injection](https://www.ired.team/offensive-security/code-injection-process-injection)  
+  Trang tổng hợp nhiều kỹ thuật code injection với ví dụ ngắn gọn, giúp có cái nhìn toàn diện về các phương pháp nạp mã.
+
+- **Windows Internals, Part 2 – Mark Russinovich et al.**   
+  Cung cấp kiến thức sâu về cách Windows quản lý tiến trình, luồng, bộ nhớ và APC queue – nền tảng để hiểu cơ chế của các kỹ thuật injection.
+
+---
+
+### II. Kỹ thuật Nạp mã (Injection Techniques)
+- **Process Hollowing – A Technical Analysis**  
+  [https://www.elastic.co/blog/a-technical-analysis-of-process-hollowing](https://www.elastic.co/blog/a-technical-analysis-of-process-hollowing)  
+  Phân tích chi tiết từng bước Process Hollowing: tạo tiến trình ở trạng thái *suspend*, ghi đè bộ nhớ, và thực thi mã độc.
+
+- **Asynchronous Procedure Calls (APC) Injection**  
+  [https://www.ired.team/offensive-security/code-injection-process-injection/apc-injection-for-dll-injection](https://www.ired.team/offensive-security/code-injection-process-injection/apc-injection-for-dll-injection)  
+  Giải thích rõ cách lợi dụng hàng đợi APC của luồng để thực thi mã một cách gián tiếp.
+
+- **Tài liệu gốc từ Microsoft (Classic Injection)**  
+  - [CreateRemoteThread](https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread)  
+  - [VirtualAllocEx](https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex)  
+  Trích dẫn trực tiếp từ Microsoft, minh họa cách sử dụng API cho việc tiêm mã kinh điển.
+
+---
+
+### III. Kỹ thuật Che giấu & Lẩn tránh (Obfuscation & Evasion)
+- **API Hashing – Maldev Academy**  
+  [https://maldevacademy.com/posts/api-hashing/](https://maldevacademy.com/posts/api-hashing/)  
+  Hướng dẫn chi tiết về API Hashing, lý do sử dụng (tránh IAT hooking, phân tích tĩnh) và cách triển khai trong C++.
+
+- **Anti-Sandbox & Anti-Analysis Techniques**  
+  [The Ultimate Anti-Reversing Reference (PDF)](https://anti-reversing.com/Downloads/Anti-Reversing/The_Ultimate_Anti-Reversing_Reference.pdf)  
+  Tài liệu toàn diện liệt kê hàng trăm kỹ thuật chống gỡ lỗi, chống máy ảo và chống sandbox.
+
+- **Advanced Encryption Standard (AES) – FIPS 197**  
+  [https://nvlpubs.nist.gov/nistpubs/fips/nist.fips.197.pdf](https://nvlpubs.nist.gov/nistpubs/fips/nist.fips.197.pdf)  
+  Tiêu chuẩn chính thức của NIST định nghĩa về AES – nguồn học thuật quan trọng khi triển khai mã hóa.
+
+---
+
+### IV. Giám sát, Phát hiện & Ghi Log (Sysmon)
+- **Sysmon – Microsoft Sysinternals**  
+  [https://docs.microsoft.com/en-us/sysinternals/downloads/sysmon](https://docs.microsoft.com/en-us/sysinternals/downloads/sysmon)  
+  Trang tài liệu gốc mô tả công cụ Sysmon và các Event ID liên quan.
+
+- **Sysmon Configuration Project – SwiftOnSecurity**  
+  [https://github.com/SwiftOnSecurity/sysmon-config](https://github.com/SwiftOnSecurity/sysmon-config)  
+  Repo cấu hình Sysmon nổi tiếng trong cộng đồng, được sử dụng rộng rãi cho hunting và detection.
+
+- **SANS DFIR – Sysmon Cheatsheet**  
+  [https://www.sans.org/posters/sysmon-threat-hunting-cheatsheet/](https://www.sans.org/posters/sysmon-threat-hunting-cheatsheet/)  
+  Poster/cheatsheet tóm tắt ý nghĩa từng Event ID và liên kết với các hành vi tấn công, rất hữu ích cho phân tích log.
