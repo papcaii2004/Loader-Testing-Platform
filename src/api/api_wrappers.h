@@ -6,7 +6,13 @@ inline PVOID MyVirtualAlloc(SIZE_T dwSize) {
 #ifdef USE_DIRECT_SYSCALLS
     PVOID baseAddress = NULL;
     SIZE_T regionSize = dwSize;
-    NTSTATUS status = sysNtAllocateVirtualMemory(GetCurrentProcess(), &baseAddress, 0, &regionSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    NTSTATUS status = sysNtAllocateVirtualMemory(
+        GetCurrentProcess(), 
+        &baseAddress, 0, 
+        &regionSize, 
+        MEM_COMMIT | MEM_RESERVE, 
+        PAGE_EXECUTE_READWRITE
+    );
     if (status != 0) return NULL;
     return baseAddress;
 #else
@@ -18,7 +24,19 @@ inline PVOID MyVirtualAlloc(SIZE_T dwSize) {
 inline HANDLE MyCreateThread(LPVOID lpStartAddress) {
 #ifdef USE_DIRECT_SYSCALLS
     HANDLE hThread = NULL;
-    NTSTATUS status = sysNtCreateThreadEx(&hThread, GENERIC_ALL, NULL, GetCurrentProcess(), lpStartAddress, NULL, 0, 0, 0, 0, NULL);
+    NTSTATUS status = sysNtCreateThreadEx(
+        &hThread, 
+        GENERIC_ALL, 
+        NULL, 
+        GetCurrentProcess(), 
+        lpStartAddress, 
+        NULL, 
+        0, 
+        0, 
+        0, 
+        0, 
+        NULL
+    );
     if (status != 0) return NULL;
     return hThread;
 #else
@@ -29,9 +47,7 @@ inline HANDLE MyCreateThread(LPVOID lpStartAddress) {
 // --- WRAPPER CHO WaitForSingleObject ---
 inline void MyWaitForSingleObject(HANDLE hObject) {
 #ifdef USE_DIRECT_SYSCALLS
-    LARGE_INTEGER timeout;
-    timeout.QuadPart = -1; // Chờ vô hạn
-    sysNtWaitForSingleObject(hObject, FALSE, &timeout);
+    sysNtWaitForSingleObject(hObject, FALSE, NULL);
 #else
     WaitForSingleObject(hObject, INFINITE);
 #endif
