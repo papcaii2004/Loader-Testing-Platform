@@ -38,6 +38,8 @@ GUEST_LOG_OUTPUT = os.path.join(GUEST_DESKTOP, "detection_log.txt")
 LISTENER_IP = "192.168.142.1"
 LISTENER_PORT = 4444
 
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
 # Biến toàn cục để listener thread cập nhật
 connection_received = False
 
@@ -170,6 +172,11 @@ def build_payload(shellcode_path, build_options):
 
     # 5. Compile
     output_filename = f"payload_{int(time.time())}.exe"
+
+    run_command(["make", "clean"])
+    
+    obj_dir = os.path.join(PROJECT_ROOT, "build", "obj")
+    os.makedirs(obj_dir, exist_ok=True)
 
     if not run_command(["make", "build", f"SRC={os.path.basename(source_file)}", f"OUT={output_filename}", f"DEFINES={defines_str}"]):
         logging.error("Compilation failed. Check Makefile, MinGW, and NASM setup.")
