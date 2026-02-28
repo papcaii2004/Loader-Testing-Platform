@@ -85,7 +85,7 @@ def main():
 
     # --- STAGE 1 & 3 ---
     grp_s3 = parser.add_argument_group(f'{Colors.CYAN}Stage 1 & 3: Storage & Transformation{Colors.ENDC}')
-    grp_s3.add_argument("-e", "--encryption", default="xor", choices=["none", "xor", "aes"], help="Payload encryption algorithm.")
+    grp_s3.add_argument("-e", "--encryption", default="none", choices=["none", "xor", "aes"], help="Payload encryption algorithm.")
     # (Sau này thêm --storage-method vào đây)
 
     # --- STAGE 2 & 4 ---
