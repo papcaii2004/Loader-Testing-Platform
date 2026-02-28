@@ -10,26 +10,21 @@
 #>
 
 # --- Configuration ---
-# Lấy đường dẫn Desktop của user đang chạy script
 $logFile = "$env:USERPROFILE\Desktop\detection_log.txt"
 
-# Định nghĩa khoảng thời gian cần truy vấn (5 phút gần nhất)
 $EndTime = Get-Date
 $StartTime = $EndTime.AddMinutes(-5)
 
 # --- Main Logic ---
 
-# Xóa file log cũ nếu tồn tại để đảm bảo kết quả luôn mới
 if (Test-Path $logFile) {
     Remove-Item $logFile
 }
 
 # --- Section 1: Windows Defender Detections ---
 
-# Ghi tiêu đề vào file log
 "--- Windows Defender Detections ---`r`n" | Out-File -FilePath $logFile -Encoding utf8
 
-# Truy vấn các Event ID liên quan đến việc phát hiện mã độc
 # ID 1116: Malware detection
 # ID 1117: Remediation action failed
 # ID 1118: Remediation action succeeded
@@ -70,8 +65,6 @@ $sysmonEvents = Get-WinEvent -FilterHashtable @{
 if ($null -eq $sysmonEvents) {
     "No new Sysmon events found.`r`n" | Out-File -FilePath $logFile -Encoding utf8 -Append
 } else {
-    # NÂNG CẤP: Sử dụng Format-List để xuất toàn bộ chi tiết của mỗi sự kiện
-    # thay vì chỉ lấy dòng đầu tiên.
     ($sysmonEvents | Format-List | Out-String) | Out-File -FilePath $logFile -Encoding utf8 -Append
 }
 

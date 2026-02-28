@@ -34,7 +34,7 @@ class PayloadBuilder:
 
     def _generate_defines(self):
         defines = []
-        # Mapping options to C++ macros
+        # Stage 3
         if self.options.get('encryption') == 'xor': defines.append("-DENCRYPTION_XOR")
         
         # Stage 2 & 4 Mapping
