@@ -71,7 +71,7 @@ def run_single_test(vm_name, payload_path, build_options):
         # Collect Logs
         logging.info(f"Test Failed: {status}. Collecting Artifacts...")
         # Run collector script on guest
-        vm.run_program("powershell.exe", f"-ExecutionPolicy Bypass -File {GUEST_LOG_COLLECTOR}")
+        vm.run_program(r"C:\Windows\system32\WindowsPowerShell\\v1.0\powershell.exe", f"-ExecutionPolicy Bypass -File {GUEST_LOG_COLLECTOR}")
         time.sleep(5)
         
         # Retrieve log file
