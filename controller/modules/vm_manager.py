@@ -34,16 +34,19 @@ class VMwareManager:
 
     def copy_to_guest(self, host_path, guest_path):
         self.logger.info(f"Deploying: {os.path.basename(host_path)} -> {guest_path}")
-        return self._run(["-gu", self.user, "-gp", self.passwd, "copyFileToGuest", self.vmx_path, host_path, guest_path]) is not None
+        return self._run(["-gu", self.user, "-gp", self.passwd, "CopyFileFromHostToGuest", self.vmx_path, host_path, guest_path]) is not None
 
     def copy_from_guest(self, guest_path, host_path):
-        return self._run(["-gu", self.user, "-gp", self.passwd, "copyFileFromGuest", self.vmx_path, guest_path, host_path]) is not None
+        return self._run(["-gu", self.user, "-gp", self.passwd, "CopyFileFromGuestToHost", self.vmx_path, guest_path, host_path]) is not None
 
     def run_program(self, program_path, args="", no_wait=False):
         cmd_args = ["-gu", self.user, "-gp", self.passwd, "runProgramInGuest", self.vmx_path]
         if no_wait: cmd_args.append("-noWait")
         cmd_args.append(program_path)
-        if args: cmd_args.append(args)
+        args_list = []
+        if args: 
+            args_list = args.split(" ")
+            cmd_args.extend(args_list)
         return self._run(cmd_args) is not None
 
     def list_processes(self):
