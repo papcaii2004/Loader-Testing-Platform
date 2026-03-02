@@ -12,9 +12,14 @@
 // =================================================================
 
 #ifdef DEBUG_MODE
-    #define DEBUG_MSG(title, msg) MessageBoxA(NULL, msg, title, MB_OK)
+    #define DEBUG_MSG(title, format, ...)                         \
+    do {                                                           \
+        char buffer[256];                                          \
+        sprintf_s(buffer, sizeof(buffer), format, ##__VA_ARGS__);  \
+        MessageBoxA(NULL, buffer, title, MB_OK);                   \
+    } while(0)
 #else
-    #define DEBUG_MSG(title, msg)
+    #define DEBUG_MSG(title, format, ...) do {} while(0)
 #endif
 
 __forceinline PEB* GetPeb()
