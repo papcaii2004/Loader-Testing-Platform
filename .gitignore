@@ -19,3 +19,4 @@ __pycache__/
 .idea/
 /build
 /build/generated_loader.cpp
+build/generated_loader.cpp
