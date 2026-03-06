@@ -29,108 +29,108 @@ except ImportError as e:
 
 
 def print_pipeline_banner(options, shellcode_path):
-    """Hiển thị cấu hình dưới dạng 6 Stages"""
-    
-    # --- Lấy thông tin ---
-    s0_status = f"{Colors.GREEN}[ ENABLED ]{Colors.ENDC}" if options.get('anti_evasion') else f"{Colors.WARNING}[ DISABLED ]{Colors.ENDC}"
-    s1_method = ".rdata (Embedded Variable)"
-    s3_algo = options.get('encryption').upper()
-    s3_color = Colors.GREEN if s3_algo != "NONE" else Colors.FAIL
-    
-    # API Mode ảnh hưởng đến Allocation (S2), Writing (S4), Execution (S5)
-    api_mode = options.get('api_method').upper()
-    api_color = Colors.CYAN if "SYSCALL" in api_mode else (Colors.WARNING if "INDIRECT" in api_mode else Colors.FAIL)
-    
-    inj_tech = options.get('injection').upper()
-    # Xác định Writing method dựa trên Injection technique
-    if "HOLLOWING" in inj_tech:
-        s2_alloc = "Remote (VirtualAllocEx)"
-        s4_write = "Remote (WriteProcessMemory)"
-        s5_exec  = "Thread Hijacking"
-    else:
-        s2_alloc = "Local (VirtualAlloc)"
-        s4_write = "Local (RtlMoveMemory)"
-        s5_exec  = "Local (CreateThread)"
+    s0_status  = f"{Colors.GREEN}[ ENABLED ]{Colors.ENDC}"  if options.get('anti_evasion') \
+                 else f"{Colors.WARNING}[ DISABLED ]{Colors.ENDC}"
+    s1_method  = options.get('t1', 'rdata').upper()
+    s2_alloc   = options.get('t2', 'local').upper()
+    s3_algo    = options.get('t3', 'none').upper()
+    s3_color   = Colors.GREEN if s3_algo != "NONE" else Colors.FAIL
+    s4_write   = options.get('t4', 'local').upper()
+    s5_exec    = options.get('t5', 'classic').upper()
+    api_mode   = options.get('api_method', 'winapi').upper()
+    api_color  = Colors.CYAN if "SYSCALL" in api_mode else \
+                 (Colors.WARNING if "INDIRECT" in api_mode else Colors.FAIL)
 
     sc_name = os.path.basename(shellcode_path)
 
     print(f"\n{Colors.BOLD}{Colors.HEADER}=== EVASION ENGINEERING PIPELINE (6-STAGE MODEL) ==={Colors.ENDC}")
     print(f"Payload Source: {Colors.CYAN}{sc_name}{Colors.ENDC}")
     print("│")
-    
-    # STAGE 0
     print(f"├── {Colors.BOLD}Stage 0: Anti-Analysis{Colors.ENDC}")
     print(f"│   └── Checks:       {s0_status}")
     print("│")
-    
-    # STAGE 1
     print(f"├── {Colors.BOLD}Stage 1: Storage{Colors.ENDC}")
     print(f"│   └── Location:     {s1_method}")
     print("│")
-
-    # STAGE 2
     print(f"├── {Colors.BOLD}Stage 2: Allocation{Colors.ENDC} {api_color}[{api_mode}]{Colors.ENDC}")
     print(f"│   └── Strategy:     {s2_alloc}")
     print("│")
-
-    # STAGE 3
     print(f"├── {Colors.BOLD}Stage 3: Transformation{Colors.ENDC}")
     print(f"│   └── Algorithm:    {s3_color}{s3_algo}{Colors.ENDC}")
     print("│")
-
-    # STAGE 4
     print(f"├── {Colors.BOLD}Stage 4: Writing{Colors.ENDC} {api_color}[{api_mode}]{Colors.ENDC}")
     print(f"│   └── Method:       {s4_write}")
     print("│")
-    
-    # STAGE 5
     print(f"└── {Colors.BOLD}Stage 5: Execution{Colors.ENDC} {api_color}[{api_mode}]{Colors.ENDC}")
     print(f"    └── Technique:    {Colors.GREEN}{s5_exec}{Colors.ENDC}")
     print("")
 
 def main():
     parser = argparse.ArgumentParser(
-        description="FUD Testing Platform - Automated Evasion Engineering",
+        description="FUD Loader - Evasion Engineering Platform",
         formatter_class=argparse.RawTextHelpFormatter
     )
-    
-    # --- GLOBAL OPTIONS ---
-    grp_global = parser.add_argument_group(f'{Colors.CYAN}Global Options{Colors.ENDC}')
-    grp_global.add_argument("-s", "--shellcode", required=True, metavar="PATH", help="Path to raw shellcode (.bin)")
-    grp_global.add_argument("-v", "--vms", nargs='*', metavar="VM", help="Target VMs (e.g., 'Windows Defender').")
-    grp_global.add_argument("--build-only", action="store_true", help="Build only, do not run tests.")
-    grp_global.add_argument("--debug", action="store_true", help="Enable debug popups in payload.")
 
-    # --- STAGE 0 ---
-    grp_s0 = parser.add_argument_group(f'{Colors.CYAN}Stage 0: Anti-Analysis{Colors.ENDC}')
-    grp_s0.add_argument("--anti-evasion", action="store_true", help="Enable sandbox/debugger checks.")
+    # --- REQUIRED ---
+    parser.add_argument("-s", "--shellcode", required=True, metavar="PATH",
+                        help="Path to raw shellcode (.bin)")
 
-    # --- STAGE 1 & 3 ---
-    grp_s3 = parser.add_argument_group(f'{Colors.CYAN}Stage 1 & 3: Storage & Transformation{Colors.ENDC}')
-    grp_s3.add_argument("-e", "--encryption", default="none", choices=["none", "xor", "aes"], help="Payload encryption algorithm.")
+    # --- STAGE FLAGS ---
+    parser.add_argument("-t0", dest="t0", metavar="TECH", default="none",
+                        choices=["none", "antidebug"],
+                        help="Stage 0 - Anti-Analysis:     none | antidebug")
 
-    # --- STAGE 2 & 4 ---
-    grp_s24 = parser.add_argument_group(f'{Colors.CYAN}Stage 2 & 4: Allocation & Execution{Colors.ENDC}')
-    grp_s24.add_argument("-i", "--injection", default="classic", choices=["classic", "hollowing", "apc"], help="Injection technique.")
-    
+    parser.add_argument("-t1", dest="t1", metavar="TECH", default="rdata",
+                        choices=["rdata"],
+                        help="Stage 1 - Storage:           rdata")
+
+    parser.add_argument("-t2", dest="t2", metavar="TECH", default="local",
+                        choices=["local"],
+                        help="Stage 2 - Allocation:        local")
+
+    parser.add_argument("-t3", dest="t3", metavar="TECH", default="none",
+                        choices=["none", "xor", "aes"],
+                        help="Stage 3 - Transformation:    none | xor | aes")
+
+    parser.add_argument("-t4", dest="t4", metavar="TECH", default="local",
+                        choices=["local"],
+                        help="Stage 4 - Writing:           local")
+
+    parser.add_argument("-t5", dest="t5", metavar="TECH", default="thread",
+                        choices=["thread", "apc"],
+                        help="Stage 5 - Execution:         thread | apc")
+
     # --- API LAYER ---
-    grp_api = parser.add_argument_group(f'{Colors.CYAN}API Abstraction Layer{Colors.ENDC}')
-    grp_api.add_argument("--api-method", default="winapi", choices=["winapi", "winapi-indirect", "syscalls"], help="API calling convention.")
+    parser.add_argument("--api", dest="api_method", metavar="MODE", default="winapi",
+                        choices=["winapi", "indirect", "syscalls"],
+                        help="API Layer:                   winapi | indirect | syscalls")
+
+    # --- MISC ---
+    parser.add_argument("-v", "--vms", nargs='*', metavar="VM",
+                        help="Target VMs for testing")
+    parser.add_argument("--build-only", action="store_true",
+                        help="Build only, skip test")
+    parser.add_argument("--debug", action="store_true",
+                        help="Enable DEBUG_MODE in payload")
 
     args = parser.parse_args()
 
-    # --- VALIDATION ---
     if not args.build_only and not args.vms:
-        parser.error("You must specify target VMs with -v/--vms OR use --build-only.")
+        parser.error("Specify target VMs with -v/--vms OR use --build-only.")
 
-    # --- PREPARE ---
-    # Chuyển đường dẫn tương đối thành tuyệt đối dựa trên PROJECT_ROOT
-    if not os.path.isabs(args.shellcode):
-        shellcode_path = os.path.join(PROJECT_ROOT, args.shellcode)
-    else:
-        shellcode_path = args.shellcode
-
-    build_options = vars(args)
+    shellcode_path = args.shellcode if os.path.isabs(args.shellcode) \
+                     else os.path.join(PROJECT_ROOT, args.shellcode)
+                     
+    build_options = {
+        "t0":         args.t0,
+        "t1":         args.t1,
+        "t2":         args.t2,
+        "t3":         args.t3,       # builder dùng key này cho encrypt
+        "t4":         args.t4,
+        "t5":         args.t5,
+        "api_method": args.api_method,
+        "debug":      args.debug,
+    }
 
     # --- DISPLAY BANNER ---
     print_pipeline_banner(build_options, shellcode_path)
