@@ -1,57 +1,61 @@
 # controller/modules/definitions.py
 
-# Map các tùy chọn CLI sang cờ Preprocessor của C++
-# Format: 'cli_option': '-DFLAG_NAME'
-
-ENCRYPTION_FLAGS = {
-    'xor': '-DENCRYPTION_XOR',
-    'aes': '-DENCRYPTION_AES',
-    'none': ''
-}
-
-INJECTION_FLAGS = {
-    'classic': '-DINJECTION_CLASSIC',
-    'hollowing': '-DINJECTION_HOLLOWING',
-    'apc': '-DINJECTION_APC', # Ví dụ mở rộng
+# Map trực tiếp từ -tN value sang C++ preprocessor flag
+STAGE_FLAGS = {
+    # -t0
+    't0': {
+        'none':     '',
+        'antidebug': '-DEVASION_CHECKS_ENABLED',
+    },
+    # -t1: chưa có flag (storage mặc định là rdata)
+    't1': {
+        'rdata': '',
+    },
+    # -t2
+    't2': {
+        'local': '',
+    },
+    # -t3
+    't3': {
+        'none': '',
+        'xor':  '-DENCRYPTION_XOR',
+        'aes':  '-DENCRYPTION_AES',
+    },
+    # -t4
+    't4': {
+        'local': '',
+    },
+    # -t5
+    't5': {
+        'thread': '-DINJECTION_CLASSIC',
+        'apc':    '-DINJECTION_APC',
+    },
 }
 
 API_FLAGS = {
+    'winapi':   '',
+    'indirect': '-DUSE_INDIRECT_WINAPI',
     'syscalls': '-DUSE_DIRECT_SYSCALLS',
-    'winapi-indirect': '-DUSE_INDIRECT_WINAPI',
-    'winapi': '' 
-}
-
-# Các cờ bật/tắt (Boolean)
-FEATURE_FLAGS = {
-    'anti_evasion': '-DEVASION_CHECKS_ENABLED',
-    'debug': '-DDEBUG_MODE'
 }
 
 def get_defines(options):
-    """Tổng hợp tất cả các cờ dựa trên options được truyền vào"""
     defines = []
-    
-    # 1. Encryption
-    enc_method = options.get('encryption', 'none')
-    if enc_method in ENCRYPTION_FLAGS:
-        flag = ENCRYPTION_FLAGS[enc_method]
-        if flag: defines.append(flag)
-        
-    # 2. Injection
-    inj_method = options.get('injection', 'classic')
-    if inj_method in INJECTION_FLAGS:
-        flag = INJECTION_FLAGS[inj_method]
-        if flag: defines.append(flag)
-        
-    # 3. API Method
-    api_method = options.get('api_method', 'winapi')
-    if api_method in API_FLAGS:
-        flag = API_FLAGS[api_method]
-        if flag: defines.append(flag)
-        
-    # 4. Features (Boolean flags)
-    for key, flag in FEATURE_FLAGS.items():
-        if options.get(key):
+
+    # Stage flags
+    for stage, mapping in STAGE_FLAGS.items():
+        val = options.get(stage, '')
+        flag = mapping.get(val, '')
+        if flag:
             defines.append(flag)
-            
+
+    # API layer
+    api = options.get('api_method', 'winapi')
+    flag = API_FLAGS.get(api, '')
+    if flag:
+        defines.append(flag)
+
+    # Debug
+    if options.get('debug'):
+        defines.append('-DDEBUG_MODE')
+
     return " ".join(defines)
