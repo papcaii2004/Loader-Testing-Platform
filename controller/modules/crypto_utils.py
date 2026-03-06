@@ -2,23 +2,27 @@
 import random
 import string
 import logging
-from Crypto.Cipher import AES
-from Crypto.Random import get_random_bytes
+import tinyaes
+import os
 
 logger = logging.getLogger("CryptoUtils")
 
 def xor_encrypt(data):
-    key = get_random_bytes(16)
+    key = os.urandom(16)
     ciphertext = bytearray(b ^ key[i % len(key)] for i, b in enumerate(data))
     return ciphertext, key
 
 def aes_encrypt(data):
-    key = get_random_bytes(32)  # AES-256
-    cipher = AES.new(key, AES.MODE_CTR)
+    key = os.urandom(16)   
+    nonce = os.urandom(8)
+
+    # tinyaes cần iv 16 bytes: [8-byte nonce] + [8-byte zero counter]
+    iv = nonce + b'\x00' * 8
+
+    cipher = tinyaes.AES(key, iv)
+    ciphertext = cipher.CTR_xcrypt_buffer(bytes(data))
     
-    ciphertext = cipher.encrypt(data)
-    
-    return ciphertext, key, cipher.nonce
+    return ciphertext, key, nonce
 
 # Dispatcher: Hàm điều phối chính
 def apply_encryption(data, method):

