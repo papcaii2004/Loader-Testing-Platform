@@ -38,7 +38,8 @@ inline PVOID MyVirtualAllocEx(
 #endif
 }
 
-inline HANDLE MyCreateThread(
+inline HANDLE MyCreateThreadEx(
+    HANDLE hProcess,
     LPTHREAD_START_ROUTINE lpStartAddress,
     LPVOID lpParameter,
     DWORD dwCreationFlags
@@ -51,7 +52,7 @@ inline HANDLE MyCreateThread(
         &hThread,
         GENERIC_ALL,
         NULL,
-        (HANDLE)-1,          // current process
+        hProcess,
         lpStartAddress,
         lpParameter,
         dwCreationFlags,
@@ -68,12 +69,14 @@ inline HANDLE MyCreateThread(
 
 #else
 
-    return CreateThread(
+    return CreateRemoteThreadEx(
+        hProcess,
         NULL,
         0,
         lpStartAddress,
         lpParameter,
         dwCreationFlags,
+        NULL,
         NULL
     );
 

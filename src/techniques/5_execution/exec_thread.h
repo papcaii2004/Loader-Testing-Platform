@@ -4,7 +4,8 @@
 
 void Stage5_Exec_LocalThread(LPVOID address) {
     DEBUG_MSG("Stage 5", "Execute on new thread");
-    HANDLE hThread = MyCreateThread(
+    HANDLE hThread = MyCreateThreadEx(
+        (HANDLE)-1,
         (LPTHREAD_START_ROUTINE)address,
         NULL,
         0

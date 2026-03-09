@@ -1,6 +1,7 @@
 #pragma once
 #include "../../api/api_wrappers.h"
 #include "../../core/utils.h"
+#include <cstring>
 
 BOOL Stage4_Write_Local(LPVOID dest, unsigned char* src, int len) {
 
@@ -10,7 +11,7 @@ BOOL Stage4_Write_Local(LPVOID dest, unsigned char* src, int len) {
                   len, dest, src);
     #endif
 
-    RtlMoveMemory(dest, src, len);
+    memcpy(dest, src, len);
 
     #ifdef DEBUG_MODE
         DEBUG_MSG("Stage 4", "Write completed");
