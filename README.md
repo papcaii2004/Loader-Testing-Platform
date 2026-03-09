@@ -164,3 +164,7 @@ Generated payloads must **never be distributed or executed outside controlled sy
 # License
 
 This project is intended for **educational and research purposes only**.
+
+# Reference
+
+- [Shhhloader](https://github.com/icyguider/Shhhloader/tree/main): A well-known shellcode loader, I use it for mapping techniques
