@@ -16,7 +16,7 @@ The platform automates the entire testing workflow:
 The goal is to support **systematic research on shellcode loader behavior** and improve both **offensive experimentation (Red Team)** and **defensive detection analysis (Blue Team)**.
 
 The loader techniques implemented in this repository follow a **structured multi-stage model**.  
-Detailed documentation of the framework and techniques can be found in (here)[./docs/]
+Detailed documentation of the framework and techniques can be found in [here](./docs/)
 
 ---
 
