@@ -2,6 +2,7 @@ import argparse
 import os
 import sys
 import time
+from controller.modules.definitions import STAGE_FLAGS
 
 # --- MÀU SẮC CHO TERMINAL (ANSI Codes) ---
 class Colors:
@@ -68,8 +69,7 @@ def print_pipeline_banner(options, shellcode_path):
 def main():
     parser = argparse.ArgumentParser(
         description="FUD Loader - Evasion Engineering Platform",
-        formatter_class=argparse.RawTextHelpFormatter
-    )
+        formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=40)    )
 
     # --- REQUIRED ---
     parser.add_argument("-s", "--shellcode", required=True, metavar="PATH",
@@ -78,27 +78,27 @@ def main():
     # --- STAGE FLAGS ---
     parser.add_argument("-t0", dest="t0", metavar="TECH", default="none",
                         choices=["none", "antidebug"],
-                        help="Stage 0 - Anti-Analysis:     none | antidebug")
+                        help="Stage 0 - Anti-Analysis")
 
     parser.add_argument("-t1", dest="t1", metavar="TECH", default="rdata",
-                        choices=["rdata"],
-                        help="Stage 1 - Storage:           rdata")
+                        choices=list(STAGE_FLAGS['t1'].keys()),
+                        help=f"Stage 1 - Storage ({', '.join(STAGE_FLAGS['t1'].keys())})")
 
     parser.add_argument("-t2", dest="t2", metavar="TECH", default="local",
-                        choices=["local"],
-                        help="Stage 2 - Allocation:        local")
+                        choices=list(STAGE_FLAGS['t2'].keys()),
+                        help=f"Stage 2 - Storage ({', '.join(STAGE_FLAGS['t2'].keys())})")
 
     parser.add_argument("-t3", dest="t3", metavar="TECH", default="none",
-                        choices=["none", "xor", "aes"],
-                        help="Stage 3 - Transformation:    none | xor | aes")
+                        choices=list(STAGE_FLAGS['t3'].keys()),
+                        help=f"Stage 3 - Storage ({', '.join(STAGE_FLAGS['t3'].keys())})")
 
     parser.add_argument("-t4", dest="t4", metavar="TECH", default="local",
-                        choices=["local"],
-                        help="Stage 4 - Writing:           local")
+                        choices=list(STAGE_FLAGS['t4'].keys()),
+                        help=f"Stage 4 - Storage ({', '.join(STAGE_FLAGS['t4'].keys())})")
 
-    parser.add_argument("-t5", dest="t5", metavar="TECH", default="thread",
-                        choices=["thread", "apc"],
-                        help="Stage 5 - Execution:         thread | apc")
+    parser.add_argument("-t5", dest="t5", metavar="TECH", default="local",
+                        choices=list(STAGE_FLAGS['t5'].keys()),
+                        help=f"Stage 5 - Storage ({', '.join(STAGE_FLAGS['t5'].keys())})")
 
     # --- API LAYER ---
     parser.add_argument("--api", dest="api_method", metavar="MODE", default="winapi",

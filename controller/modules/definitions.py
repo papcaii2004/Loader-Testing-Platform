@@ -9,26 +9,25 @@ STAGE_FLAGS = {
     },
     # -t1: chưa có flag (storage mặc định là rdata)
     't1': {
-        'rdata': '',
+        'rdata': '-DT1_STORAGE_RDATA',
     },
     # -t2
     't2': {
-        'local': '',
+        'local': '-DT2_ALLOC_LOCAL',
     },
     # -t3
     't3': {
-        'none': '',
-        'xor':  '-DENCRYPTION_XOR',
-        'aes':  '-DENCRYPTION_AES',
+        'none': '-DT3_TRANSFORM_NONE',
+        'xor':  '-DT3_TRANSFORM_XOR',
+        'aes':  '-DT3_TRANSFORM_AES',
     },
     # -t4
     't4': {
-        'local': '',
+        'local': '-DT4_WRITE_LOCAL',
     },
     # -t5
     't5': {
-        'thread': '-DINJECTION_CLASSIC',
-        'apc':    '-DINJECTION_APC',
+        'local': '-DT5_EXEC_LOCAL',
     },
 }
 

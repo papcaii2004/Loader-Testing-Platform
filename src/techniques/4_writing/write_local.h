@@ -1,25 +1,29 @@
 #pragma once
-#include "../../api/api_wrappers.h"
 #include "../../core/utils.h"
-#include <cstring>
+#include "../context.h"
 
-BOOL Stage4_Write_Local(LPVOID dest, unsigned char* src, int len) {
+inline BOOL Stage4_Write_Local(TechniqueContext* ctx)
+{
+    if (!ctx || !ctx->allocated_mem || !ctx->data)
+        return FALSE;
 
-    #ifdef DEBUG_MODE
-        DEBUG_MSG("Stage 4",
-                  "Writing %d bytes to %p from %p",
-                  len, dest, src);
-    #endif
+#ifdef DEBUG_MODE
+    DEBUG_MSG("Stage 4",
+              "Writing %llu bytes to %p",
+              ctx->length,
+              ctx->allocated_mem);
+#endif
 
-    memcpy(dest, src, len);
+    memcpy(ctx->allocated_mem, ctx->data, ctx->length);
 
-    #ifdef DEBUG_MODE
-        DEBUG_MSG("Stage 4", "Write completed");
-        unsigned char* check = (unsigned char*)dest;
-        DEBUG_MSG("Stage 4",
-          "Dest bytes: %02X %02X %02X %02X %02X %02X %02X %02X",
-          check[0], check[1], check[2], check[3], check[4], check[5], check[6], check[7]);
-    #endif
+#ifdef DEBUG_MODE
+    unsigned char* check = (unsigned char*)ctx->allocated_mem;
+
+    DEBUG_MSG("Stage 4",
+              "Dest bytes: %02X %02X %02X %02X %02X %02X %02X %02X",
+              check[0], check[1], check[2], check[3],
+              check[4], check[5], check[6], check[7]);
+#endif
 
     return TRUE;
 }

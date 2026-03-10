@@ -53,7 +53,7 @@ inline HANDLE MyCreateThreadEx(
         GENERIC_ALL,
         NULL,
         hProcess,
-        lpStartAddress,
+        (PVOID)lpStartAddress,
         lpParameter,
         dwCreationFlags,
         0,
