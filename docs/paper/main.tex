@@ -111,38 +111,55 @@ Experimental validation on Windows Defender across multiple technique combinatio
 % =============================================================================
 \section{Introduction}
 
-Shellcode loaders are the delivery mechanism through which arbitrary code payloads are prepared, placed into memory, and executed.
-They play a central role in both legitimate penetration testing and real-world cyberattacks~\cite{mitre_execution}, with their sophistication continuously evolving to evade increasingly capable security products such as antivirus (AV) engines and Endpoint Detection and Response (EDR) systems.
+% --- Broad context: malware and the two-component architecture ---
+Malware remains one of the most persistent threats in cybersecurity, with adversaries continuously developing new techniques to compromise systems and evade detection~\cite{mitre_attack}.
+At the implementation level, modern malware that delivers arbitrary code payloads typically exhibits a two-component architecture: the \textit{payload}---the shellcode that performs the intended malicious action, such as establishing a reverse shell or deploying ransomware---and the \textit{loader}---the program responsible for preparing, placing, and executing that payload in memory.
+While the payload defines \textit{what} the malware does, the loader determines \textit{how} the payload reaches execution, handling memory allocation, decryption, and control flow transfer.
 
-The current landscape of loader knowledge presents significant challenges for both researchers and defenders.
-On the offensive research side, knowledge is \textbf{fragmented}: techniques are scattered across blog posts, open-source repositories, and conference talks, with no unifying framework that relates them~\cite{loader_survey}.
-A researcher studying process injection may encounter dozens of isolated technique write-ups without understanding how these techniques fit into the broader loader lifecycle or how they interact with other components.
-On the defensive side, security products typically treat loaders as \textbf{opaque binaries}, detecting them (or failing to) without providing structured insight into which specific functional component was responsible for evasion.
+% --- Narrow context: why loaders are the evasion surface ---
+The loader is where the majority of evasion engineering concentrates.
+Security products---antivirus (AV) engines and Endpoint Detection and Response (EDR) systems---primarily interact with loader behavior: scanning for encrypted content at rest, monitoring memory allocation calls, and detecting suspicious thread creation or code injection~\cite{mitre_execution}.
+The payload itself is often generic and interchangeable; it is the loader that determines whether a given payload successfully executes or is detected.
+This paper focuses specifically on \textit{shellcode loaders}---programs that load and execute position-independent code (shellcode) in memory---as distinct from DLL loaders, script-based loaders, or fileless techniques.
+Shellcode loaders represent the most prevalent class in current threat landscapes while exhibiting sufficient internal complexity to warrant structured decomposition.
 
-Structured threat modeling frameworks such as MITRE ATT\&CK~\cite{mitre_attack} have demonstrated the value of decomposing adversary behavior into discrete categories.
-However, ATT\&CK operates at the tactic and technique level of the overall attack lifecycle (e.g., ``Execution'' TA0002, ``Process Injection'' T1055) and does not decompose the \textit{internal stages} of a single loader binary.
-Automated analysis platforms such as Cuckoo Sandbox~\cite{cuckoo} and ANY.RUN~\cite{anyrun} execute samples but analyze them as black boxes without supporting systematic technique-level comparison.
+% --- Problem statement: fragmented knowledge ---
+Despite the central role of loaders, the current landscape presents significant challenges for both researchers and defenders.
+On the offensive research side, knowledge is \textbf{fragmented}: techniques such as process injection~\cite{process_injection}, API hook evasion~\cite{api_unhooking}, and direct syscall invocation~\cite{hellsgate} are scattered across blog posts, open-source repositories, and conference talks, with no unifying framework that relates them within a loader's execution lifecycle.
+On the defensive side, security products treat loaders as \textbf{opaque binaries}---a defender investigating why a loader evaded detection cannot easily determine whether evasion succeeded due to encrypted storage, direct syscall invocation, or callback-based execution, each of which requires a different detection strategy.
 
-This paper addresses these gaps by proposing a \textbf{six-stage pipeline model} for shellcode loaders and building upon it a \textbf{dual-purpose knowledge platform} that serves both red team and blue team research.
+% --- Brief gap motivation (detailed review in Section 2) ---
+Existing approaches address aspects of this problem but leave critical gaps.
+Threat modeling frameworks such as MITRE ATT\&CK~\cite{mitre_attack} decompose adversary behavior at the tactic and technique level but do not model the \textit{internal functional stages} of a single loader binary.
+Automated analysis platforms such as Cuckoo Sandbox~\cite{cuckoo} and ANY.RUN~\cite{anyrun} execute samples as black boxes without supporting systematic technique-level comparison.
+A detailed review of related work is provided in Section~2.
+
+% --- This paper's proposal ---
+This paper addresses these gaps by proposing a \textbf{six-stage pipeline model} that decomposes shellcode loaders into discrete functional stages---Anti-Analysis, Storage, Allocation, Transformation, Writing, and Execution---and building upon this model a \textbf{dual-purpose platform} that serves both offensive and defensive security research.
 Our contributions are:
 
 \begin{enumerate}[leftmargin=*, itemsep=2pt]
-    \item A \textbf{formal six-stage pipeline model} that decomposes any shellcode loader into discrete, composable functional stages, providing a standardized vocabulary for description, classification, and comparison.
+    \item A \textbf{six-stage pipeline model} that decomposes shellcode loaders into discrete, composable functional stages, providing a standardized vocabulary for description, classification, and comparison of loader implementations.
 
-    \item A \textbf{dual-purpose knowledge platform} built on this model:
+    \item A \textbf{dual-purpose platform} built on this model that bridges offensive and defensive research:
     \begin{itemize}[leftmargin=*, itemsep=1pt]
-        \item \textit{Red team}: structured loader generation through modular technique selection, enabling systematic learning without fragmented knowledge.
-        \item \textit{Blue team}: stage-aware detection surface mapping with concrete detection rules and a methodology for identifying coverage gaps.
+        \item \textit{Red team}: structured loader generation through modular, per-stage technique selection, enabling systematic study without fragmented knowledge sources.
+        \item \textit{Blue team}: stage-aware detection surface mapping with concrete Sigma and YARA rules, and a methodology for identifying detection coverage gaps.
     \end{itemize}
 
-    \item An \textbf{automated testing infrastructure} that generates loader variants through compile-time composition, executes them in isolated VM environments, and collects stage-mapped telemetry for detection analysis.
+    \item An \textbf{automated testing infrastructure} that compiles loader variants through compile-time technique composition, executes them in isolated VM environments against security products, and collects structured telemetry mapped to pipeline stages for detection analysis.
 \end{enumerate}
 
+% --- Key findings preview ---
+Experimental validation against Windows Defender demonstrates that the Transformation stage is the primary detection differentiator, with AES encryption eliminating static detection entirely, and that stage-specific detection rules provide visibility even for configurations that evade commercial AV---confirming the value of stage-level analysis for both attack research and defense engineering.
+
+% --- Paper organization ---
 The remainder of this paper is organized as follows.
-Section~2 reviews related work and identifies the research gaps this work addresses.
-Section~3 presents the proposed methodology, encompassing the pipeline model and the dual-purpose platform.
+Section~2 reviews related work and identifies the research gap.
+Section~3 presents the methodology, encompassing the pipeline model and the dual-purpose platform.
 Section~4 reports experimental results and detection rule verification.
 Section~5 discusses findings, limitations, and future directions.
+Section~6 concludes the paper.
 
 % =============================================================================
 % SECTION 2: RELATED WORK
