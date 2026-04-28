@@ -8,7 +8,7 @@ class C2Listener:
         self.logger = logging.getLogger("C2")
         self.success = False
 
-    def listen(self, timeout=30):
+    def listen(self, timeout=15):
         self.success = False
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(timeout)

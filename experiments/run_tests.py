@@ -1,28 +1,58 @@
 #!/usr/bin/env python3
 """
-experiments/run_tests.py — Automated test-matrix runner for the paper.
+experiments/run_tests.py — Automated test-matrix runner for 5 research questions.
 
-Drives the core_engine (build + VM cycle) over a defined experiment plan:
+Research-driven phase structure: orthogonal ablation study with L2/L5 constraints.
+Each phase isolates a specific RQ; L2/L4/L5 pairings enforced by loader architecture.
+ALL phases test across BOTH API modes (winapi + syscalls).
 
-  Phase A — sanity check  : 1 config x 3 reps to confirm determinism.
-  Phase B — main factorial: 18 configs, L2/L4 = (local RWX, memcpy),
-                            L3 x L5 x API.
-  Phase C — W^X factorial : 18 configs, L2/L4 = (local_rw, local_rx),
-                            L3 x L5 x API.
-  Phase D — antidebug spot: 2 configs, L0 = antidebug baseline vs stealth.
+Constraints:
+  IF L5 ∈ {local, monitors, fiber}
+    THEN L2 ∈ {local, local_rw} AND L4 ∈ {local, local_rx}
+  IF L5 == remote_thread
+    THEN L2 ∈ {remote, spawn} AND L4 == remote
 
-Per-batch output layout:
+    Phase A — RQ1 Baseline
+              Does the loader work at all?
+              Config: baseline (L2=local, L4=local, L5=local) × 3 reps
+    
+    Phase B — RQ2 Local Allocations
+              How do L2 allocation choices (local vs local_rw) affect detection?
+              Vary: L2 ∈ {local, local_rw} + all L0/L1/L3/L5_local × 2 APIs
+              L5_local = {local, monitors, fiber} (same-process methods only)
+              Runs: 2 × 3 × 2 × 6 × 3 × 2 = 432 runs
+    
+    Phase C — RQ3 Remote Allocations
+              How do cross-process L2 choices affect detection?
+              Vary: L2 ∈ {remote, spawn} + all L0/L1/L3 × 2 APIs
+              Fix: L4=remote, L5=remote_thread (enforced)
+              Runs: 2 × 3 × 2 × 6 × 2 = 144 runs
+    
+    Phase D — RQ4 Cryptography
+              Which L3 encryption/transformation is most evasive?
+              Vary: L3 ∈ {none, xor, aes, rc4, chacha20, bitwise} × 2 APIs
+              Fix: L0/L1/L2/L4/L5 to baseline
+              Runs: 6 × 2 = 12 runs
+    
+    Phase E — RQ5 Anti-Analysis
+              Which L0 anti-debug technique works?
+              Vary: L0 ∈ {none, antidebug, sleep_skew} × 2 APIs
+              Fix: L1/L2/L3/L4/L5 to baseline
+              Runs: 3 × 2 = 6 runs
+
+Total: 3 (sanity) + 432 + 144 + 12 + 6 = 597 runs
+
+Per-batch output:
   experiments/runs/<batch_timestamp>/
-      matrix.csv                  # summary of all runs (one row per run)
-      run_<id>_<rep>.log          # per-run builder/runner output
-      guest_<id>_<rep>.txt        # raw Defender+Sysmon telemetry from VM
+      matrix.csv                  # all runs: config + outcome code + Defender events
+      run_<id>_<rep>.log          # per-run builder/harness output + raw log
+      guest_<id>_<rep>.txt        # Defender + Sysmon telemetry from VM
 
 Usage:
   python experiments/run_tests.py -s shellcodes/payload.bin
-  python experiments/run_tests.py -s ... --phases A       # sanity only
-  python experiments/run_tests.py -s ... --phases B,C     # skip sanity+antidebug
-  python experiments/run_tests.py -s ... --dry-run        # print plan only
-  python experiments/run_tests.py -s ... --resume DIR_OR_CSV   # skip done rows
+  python experiments/run_tests.py -s ... --phases A,B,C,D,E --dry-run
+  python experiments/run_tests.py -s ... --resume experiments/runs/20260425_120000
+  python experiments/run_tests.py -s ... --summarize experiments/runs/20260425_120000
 """
 
 import argparse
@@ -42,8 +72,20 @@ sys.path.insert(0, REPO_ROOT)
 
 from controller import core_engine  # noqa: E402 — import after sys.path tweak
 from controller.config import VMS_CONFIG, PROJECT_ROOT  # noqa: E402
+from controller.modules.definitions import STAGE_FLAGS, API_FLAGS  # noqa: E402
 
 BATCH_ROOT = os.path.join(HERE, "runs")  # experiments/runs/
+
+T0_TECHNIQUES = list(STAGE_FLAGS["t0"].keys())
+T1_TECHNIQUES = list(STAGE_FLAGS["t1"].keys())
+T3_TECHNIQUES = list(STAGE_FLAGS["t3"].keys())
+API_METHODS = list(API_FLAGS.keys())
+
+LOCAL_EXEC_TECHNIQUES = [
+    tech for tech in STAGE_FLAGS["t5"].keys()
+    if tech != "remote_thread"
+]
+REMOTE_EXEC_TECHNIQUE = "remote_thread"
 
 
 # ---------------------------------------------------------------------------
@@ -83,80 +125,218 @@ def _baseline(**overrides):
     return cfg
 
 
+def _get_valid_l5_for_l2(l2_value):
+    """Get valid L5 execution methods for L2 allocation strategy.
+    
+    Constraint: same-process L5 methods (local, monitors, fiber) only work
+    with same-process L2 (local, local_rw). Cross-process requires remote_thread.
+    """
+    if l2_value in ("local", "local_rw"):
+        return ["local", "monitors", "fiber"]  # Same-process L5 methods
+    elif l2_value in ("remote", "spawn"):
+        return ["remote_thread"]  # Cross-process only
+    return ["local"]
+
+
+def _pair_for_l2(l2_value):
+    """Map L2 allocation strategy to required L4 value.
+    
+    Constraint: L4 must be paired with L2:
+      - local → local
+      - local_rw → local_rx (allows write-then-execute on W^X)
+      - remote/spawn → remote (cross-process write)
+    """
+    pairs = {
+        "local": "local",
+        "local_rw": "local_rx",
+        "remote": "remote",
+        "spawn": "remote",
+    }
+    return pairs.get(l2_value, "local")
+
+
+def _phase_vary_one(prefix, vary_stage, vary_values, fixed_overrides=None):
+    """Generic: vary ONE stage, fix others to baseline, cross product with APIs.
+    
+    Args:
+        prefix: phase ID prefix ("B", "C", "D", "E")
+        vary_stage: stage to vary ("t0", "t1", "t2", "t3", "t4", "t5")
+        vary_values: list of values for that stage
+        fixed_overrides: dict of other stages to fix (merges with baseline)
+    
+    Returns:
+        list of (id, config, reps) tuples
+    """
+    configs = []
+    idx = 1
+    overrides = fixed_overrides or {}
+    
+    for val in vary_values:
+        for api in API_METHODS:  # Option C: all phases × 2 APIs
+            cfg = _baseline(**overrides)
+            cfg[vary_stage] = val
+            cfg["api_method"] = api
+            
+            # If changing L2, update paired L4/L5
+            if vary_stage == "t2":
+                l4, l5 = _pair_for_l2(val)
+                cfg["t4"] = l4
+                if l5 is not None:
+                    cfg["t5"] = l5
+            
+            configs.append((f"{prefix}{idx}", cfg, 1))
+            idx += 1
+    
+    return configs
+
+
 def phase_a():
+    """RQ1: Baseline — does the loader work?
+    
+    Sanity check: baseline config × 3 reps to measure platform variance.
+    """
     return [("A1", _baseline(), 3)]
 
 
-def _factorial(prefix, t2, t4):
+def phase_b():
+    """RQ2: Local Allocations — how do L2 allocation choices affect detection?
+    
+    Vary: L2 ∈ {local, local_rw} paired with L4 + all L0/L1/L3/L5_local-compatible × 2 APIs
+    Fix: L4 auto-paired per L2 (local→local, local_rw→local_rx)
+    Constraint: L5 limited to same-process methods {local, monitors, fiber}
+    """
     configs = []
     idx = 1
-    for t3 in ["none", "xor", "aes"]:
-        for t5 in ["local", "monitors", "fiber"]:
-            for api in ["winapi", "syscalls"]:
+    
+    # Same-process L2 allocations
+    local_l2s = ["local", "local_rw"]
+    
+    for l2 in local_l2s:
+        l4 = _pair_for_l2(l2)
+        valid_l5s = _get_valid_l5_for_l2(l2)  # Constraint: same-process L5s only
+        
+        for t3 in T3_TECHNIQUES:
+            for t5 in valid_l5s:
+                for api in API_METHODS:  # × 2 APIs
+                    configs.append((
+                        f"B{idx}",
+                        _baseline(
+                            t0="none", 
+                            t1="rdata", 
+                            t2=l2, t3=t3,
+                            t4=l4, t5=t5, api_method=api
+                        ),
+                        1,
+                    ))
+                    idx += 1
+    return configs
+
+
+def phase_c():
+    """RQ3: Remote Allocations — how do cross-process L2 choices affect detection?
+    
+    Vary: L2 ∈ {remote, spawn} with L0/L1/L3 × 2 APIs
+    Fix: L4=remote, L5=remote_thread (required for cross-process)
+    """
+    configs = []
+    idx = 1
+    
+    # Cross-process L2 allocations
+    remote_l2s = ["remote", "spawn"]
+    
+    for l2 in remote_l2s:
+        l4 = _pair_for_l2(l2)  # Always "remote"
+        l5 = "remote_thread"  # Enforced: cross-process requires remote_thread
+        
+        for t3 in T3_TECHNIQUES:
+            for api in API_METHODS:  # × 2 APIs
                 configs.append((
-                    f"{prefix}{idx}",
-                    _baseline(t2=t2, t4=t4, t3=t3, t5=t5, api_method=api),
+                    f"C{idx}",
+                    _baseline(
+                        t0="none", 
+                        t1="rdata",
+                        t2=l2, t3=t3,
+                        t4=l4, t5=l5, api_method=api
+                    ),
                     1,
                 ))
                 idx += 1
     return configs
 
 
-def phase_b():
-    return _factorial("B", "local", "local")
-
-
-def phase_c():
-    return _factorial("C", "local_rw", "local_rx")
-
-
 def phase_d():
-    return [
-        ("D1", _baseline(t0="antidebug"), 1),
-        ("D2", _baseline(t0="antidebug", t3="aes", api_method="syscalls"), 1),
-    ]
-
-
-def _remote_factorial(prefix, t2_value):
-    """Helper: factorial for a remote-style L2 + remote write/execute chain."""
+    """RQ4: Cryptography — which L3 transformation/encryption is most evasive?
+    
+    Vary: L3 ∈ {none, xor, aes, rc4, chacha20, bitwise} × 2 APIs
+    Fix: L0/L1/L2/L4/L5 to baseline (best local allocation)
+    Ablation: isolate L3 impact on detection within same-process context.
+    """
     configs = []
     idx = 1
-    for t3 in ["none", "xor", "aes"]:
-        for api in ["winapi", "syscalls"]:
-            configs.append((
-                f"{prefix}{idx}",
-                _baseline(t2=t2_value, t4="remote", t5="remote_thread",
-                          t3=t3, api_method=api),
-                1,
-            ))
-            idx += 1
+
+    contexts = [
+        {"t2": "local", "t4": "local", "t5": "local"},
+        {"t2": "remote", "t4": "remote", "t5": "remote_thread"},
+    ]
+
+    for ctx in contexts:
+        for t3 in T3_TECHNIQUES:
+            for api in API_METHODS:
+                configs.append((
+                    f"D{idx}",
+                    _baseline(
+                        t0="none",
+                        t1="rdata",
+                        t2=ctx["t2"],
+                        t4=ctx["t4"],
+                        t5=ctx["t5"],
+                        t3=t3,
+                        api_method=api
+                    ),
+                    1,
+                ))
+                idx += 1
+
     return configs
 
 
 def phase_e():
-    """Remote injection into existing explorer.exe (T2.3 + T4.3 + T5.4).
+    """RQ5: Anti-Analysis — effectiveness across execution contexts.
 
-    Generates Event 10 ProcessAccess (payload -> explorer) and Event 8
-    CreateRemoteThread (cross-process). No Event 1 for explorer (already
-    running). Distinct from local chains.
+    Vary: L0 × 2 APIs × 2 contexts
+    Fix: L1/L2/L3/L4/L5 otherwise
     """
-    return _remote_factorial("E", "remote")
+    configs = []
+    idx = 1
 
+    contexts = [
+        {"t2": "local", "t4": "local", "t5": "local"},
+        {"t2": "remote", "t4": "remote", "t5": "remote_thread"},
+    ]
 
-def phase_f():
-    """Spawn-and-inject chain (T2.4 + T4.3 + T5.4).
+    for ctx in contexts:
+        for t0 in STAGE_FLAGS["t0"].keys():
+            for api in API_METHODS:
+                configs.append((
+                    f"E{idx}",
+                    _baseline(
+                        t0=t0,
+                        t1="rdata",
+                        t2=ctx["t2"],
+                        t4=ctx["t4"],
+                        t5=ctx["t5"],
+                        t3="none",
+                        api_method=api
+                    ),
+                    1,
+                ))
+                idx += 1
 
-    Spawns notepad.exe suspended, then runs the same remote write/execute
-    path. Adds Event 1 ProcessCreate (parent=payload, child=notepad) on
-    top of the Phase E signal, exercising a different part of the
-    detection surface (suspended process creation).
-    """
-    return _remote_factorial("F", "spawn")
-
+    return configs
 
 PHASES = {
     "A": phase_a, "B": phase_b, "C": phase_c,
-    "D": phase_d, "E": phase_e, "F": phase_f,
+    "D": phase_d, "E": phase_e,
 }
 
 
@@ -251,7 +431,7 @@ def classify(raw_status, def_info):
 
 def short_name(cfg):
     return (
-        f"t0={cfg['t0']} t2={cfg['t2']} t3={cfg['t3']} "
+        f"t0={cfg['t0']} t1={cfg['t1']} t2={cfg['t2']} t3={cfg['t3']} "
         f"t4={cfg['t4']} t5={cfg['t5']} api={cfg['api_method']}"
     )
 
@@ -431,6 +611,119 @@ def run_all(shellcode_path, vm_name, phase_keys, resume_arg=None):
 
 
 # ---------------------------------------------------------------------------
+# Error analysis: extract ERROR/EXCEPTION runs for re-testing or manual review
+# ---------------------------------------------------------------------------
+
+
+def fix_and_update_csv(shellcode_path, vm_name, resume_arg):
+    batch_dir, csv_path = resolve_batch_dir(resume_arg)
+    if not csv_path or not os.path.isfile(csv_path):
+        print(f"[!] Cannot resolve batch: {resume_arg}")
+        return
+
+    # đọc toàn bộ CSV
+    with open(csv_path, "r", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+
+    updated = 0
+
+    for row in rows:
+        raw = (row.get("raw_status") or "").upper()
+        code = (row.get("code") or "").upper()
+
+        if not (
+            code in ("ERROR", "UNKNOWN")
+            or any(x in raw for x in ["EXCEPTION", "TIMEOUT", "SSH"])
+        ):
+            continue
+
+        cfg = {
+            "t0": row["t0"],
+            "t1": row["t1"],
+            "t2": row["t2"],
+            "t3": row["t3"],
+            "t4": row["t4"],
+            "t5": row["t5"],
+            "api_method": row["api"],
+            "debug": False,
+        }
+
+        cfg_id = row["id"]
+        rep = row["rep"]
+
+        print(f"[fix] {cfg_id}/{rep}  {short_name(cfg)}")
+
+        started = datetime.now().strftime("%Y%m%d_%H%M%S")
+        t0_time = time.time()
+
+        run_log_name = f"run_{cfg_id}_{rep}.log"
+        guest_log_name = f"guest_{cfg_id}_{rep}.txt"
+
+        raw_status = "UNKNOWN"
+        log_body = ""
+        payload_path = None
+
+        try:
+            payload_path = core_engine.build_payload(shellcode_path, cfg)
+            if not payload_path:
+                raw_status = "BUILD_FAILED"
+            else:
+                result = core_engine.run_single_test(
+                    vm_name, payload_path, cfg,
+                    log_dir=batch_dir,
+                    log_name=guest_log_name,
+                )
+                raw_status = result.get("status", "UNKNOWN")
+                log_body = result.get("log", "") or ""
+        except Exception as exc:
+            raw_status = f"EXCEPTION: {exc}"
+            log_body = str(exc)
+
+        wall = round(time.time() - t0_time, 1)
+        def_info = parse_defender(log_body)
+        code_new = classify(raw_status, def_info)
+
+        # update row
+        row.update({
+            "started_at": started,
+            "raw_status": raw_status,
+            "code": code_new,
+            "def_1116": def_info["def_1116"],
+            "def_1117": def_info["def_1117"],
+            "def_action": def_info["def_action"],
+            "wall_time_s": wall,
+            "payload_sha256": sha256_short(payload_path),
+            "log_file": run_log_name,
+        })
+
+        # overwrite log
+        with open(os.path.join(batch_dir, run_log_name), "w", encoding="utf-8") as lf:
+            lf.write(f"id={cfg_id} rep={rep}\n")
+            lf.write(f"config={cfg}\n")
+            lf.write(f"raw_status={raw_status}\n")
+            lf.write(f"code={code_new}\n")
+            lf.write("---\n")
+            lf.write(log_body)
+
+        updated += 1
+
+    # backup
+    backup = csv_path + ".bak"
+    if not os.path.isfile(backup):
+        with open(csv_path, "r", encoding="utf-8") as src, \
+             open(backup, "w", encoding="utf-8") as dst:
+            dst.write(src.read())
+
+    # ghi lại CSV
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    print(f"[fix-run] updated {updated} rows")
+
+
+# ---------------------------------------------------------------------------
 # Summary (used both at end of batch and via --summarize)
 # ---------------------------------------------------------------------------
 
@@ -464,8 +757,11 @@ def summarize_csv(csv_path):
     print("=" * 60)
 
     phase_names = {
-        "A": "Sanity", "B": "Main (RWX)", "C": "W^X",
-        "D": "Antidebug", "E": "Remote (existing)", "F": "Spawn (suspended)",
+        "A": "RQ1: Baseline",
+        "B": "RQ2: Local Allocations",
+        "C": "RQ3: Remote Allocations",
+        "D": "RQ4: Cryptography",
+        "E": "RQ5: Anti-Analysis",
     }
     for phase in sorted(by_phase):
         counts = by_phase[phase]
@@ -585,12 +881,14 @@ def main():
     parser.add_argument("-s", "--shellcode",
                         help="Path to shellcode .bin (relative to repo or absolute). "
                              "Required unless --dry-run or --summarize is used.")
-    parser.add_argument("--vm", default="Windows Defender",
+    parser.add_argument("--vm", default="Defender",
                         help="VM name from controller/config.py (default: 'Windows Defender')")
-    parser.add_argument("--phases", default="A,B,C,D,E,F",
-                        help="Comma-separated phase keys (A/B/C/D/E/F). Default: all.")
+    parser.add_argument("--phases", default="A,B,C,D,E",
+                        help="Comma-separated phase keys (A/B/C/D/E). Default: all.")
     parser.add_argument("--resume", metavar="DIR_OR_CSV",
                         help="Existing batch folder (or its matrix.csv) to resume.")
+    parser.add_argument("--fix-run", metavar="DIR_OR_CSV",
+                        help="Rerun only ERROR/EXCEPTION cases from an existing batch.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print the test plan and exit without running.")
     parser.add_argument("--summarize", metavar="DIR_OR_CSV",
@@ -645,12 +943,37 @@ def main():
         print(f"    Available: {list(VMS_CONFIG.keys())}")
         sys.exit(1)
 
+    if args.fix_run:
+        if not args.shellcode:
+            parser.error("--shellcode is required for --fix-run")
+
+        shellcode = args.shellcode
+        if not os.path.isabs(shellcode):
+            shellcode = os.path.join(PROJECT_ROOT, shellcode)
+
+        fix_and_update_csv(shellcode, args.vm, args.fix_run)
+        return
+
     shellcode = args.shellcode
     if not os.path.isabs(shellcode):
         shellcode = os.path.join(PROJECT_ROOT, shellcode)
     if not os.path.isfile(shellcode):
-        print(f"[!] Shellcode not found: {shellcode}")
-        sys.exit(1)
+        alt_shellcode = None
+        base = os.path.basename(shellcode)
+        parent = os.path.dirname(shellcode)
+
+        # Repo historically used "defaul_..." in the filename.
+        if base.startswith("default_"):
+            candidate = os.path.join(parent, base.replace("default_", "defaul_", 1))
+            if os.path.isfile(candidate):
+                alt_shellcode = candidate
+
+        if alt_shellcode:
+            print(f"[i] Shellcode not found at requested path, using: {alt_shellcode}")
+            shellcode = alt_shellcode
+        else:
+            print(f"[!] Shellcode not found: {shellcode}")
+            sys.exit(1)
 
     run_all(shellcode, args.vm, phase_keys, resume_arg=args.resume)
 

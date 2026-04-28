@@ -79,7 +79,7 @@ def run_single_test(vm_name, payload_path, build_options,
         # SSH-spawned processes live in the service session, which breaks
         # cross-session OpenProcess calls made by remote-injection loaders.
         if payload_deployed:
-            t = threading.Thread(target=c2.listen, args=(30,))
+            t = threading.Thread(target=c2.listen, args=(15,))
             t.start()
             time.sleep(2)  # let listener bind
             vm.launch_interactive(GUEST_PAYLOAD_PATH)

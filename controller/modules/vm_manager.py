@@ -25,7 +25,7 @@ class KVMManager:
     # ---------------------------------------------------------------
     # Low-level helpers
     # ---------------------------------------------------------------
-    def _virsh(self, args, timeout=120):
+    def _virsh(self, args, timeout=200):
         cmd = ["virsh", "-c", "qemu:///system"] + args
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.returncode == 0:
@@ -36,7 +36,7 @@ class KVMManager:
         )
         return None
 
-    def _ssh_cmd(self, remote_cmd, timeout=120, quiet=False):
+    def _ssh_cmd(self, remote_cmd, timeout=200, quiet=False):
         """Run a command on the guest via SSH.
 
         quiet=True suppresses the per-call error log on failure (used during
@@ -60,7 +60,7 @@ class KVMManager:
             )
         return None
 
-    def _scp_to_guest(self, host_path, guest_path, timeout=120):
+    def _scp_to_guest(self, host_path, guest_path, timeout=200):
         cmd = [
             "sshpass", "-p", self.password,
             "scp",
@@ -77,7 +77,7 @@ class KVMManager:
         )
         return None
 
-    def _scp_from_guest(self, guest_path, host_path, timeout=120):
+    def _scp_from_guest(self, guest_path, host_path, timeout=200):
         guest_path_sftp = win_to_sftp_path(guest_path).replace(" ", "\\ ")
         cmd = [
             "sshpass", "-p", self.password,
@@ -108,7 +108,7 @@ class KVMManager:
 
     def stop(self):
         self.logger.info("[vm] stop")
-        return self._virsh(["shutdown", self.domain]) is not None
+        return self._virsh(["destroy", self.domain]) is not None
 
     def wait_for_guest(self, timeout=120):
         self.logger.info("[vm] waiting for SSH...")

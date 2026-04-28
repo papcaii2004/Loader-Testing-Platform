@@ -10,7 +10,7 @@ UPLOADS_DIR = os.path.join(PROJECT_ROOT, "uploads")
 LOGS_DIR = os.path.join(PROJECT_ROOT, "test_logs")
 
 # Guest SSH
-GUEST_USER = "thinh"
+GUEST_USER = "tester"
 GUEST_PASSWORD = "123456"  # dùng sshpass cho password auth
 
 # Guest Paths (Windows)
@@ -33,10 +33,18 @@ LISTENER_PORT = 4444
 
 # VMs Configuration (KVM)
 VMS_CONFIG = {
-    "Windows Defender": {
-        "domain": "win11-defender",             # virsh domain name
+    "Defender": {
+        "domain": "Win11_Defender",             # virsh domain name
         "guest_ip": "192.168.122.101",    # Static IP of Windows guest
         "log_collector_host": os.path.join(PROJECT_ROOT, "log_collectors", "collect_all.ps1")
     },
     # Add more VMs here
+
+    "Kaspersky": {
+        "domain": "Win11_Kaspersky",             # virsh domain name
+        "guest_ip": "192.168.122.102",    # Static IP of Windows guest
+        "log_collector_host": os.path.join(PROJECT_ROOT, "log_collectors", "collect_all.ps1")
+    },
+    # Add more VMs here
+
 }
